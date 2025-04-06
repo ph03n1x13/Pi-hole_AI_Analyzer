@@ -1,0 +1,25 @@
+# .gitignore
+
+# Environment variables
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Database file
+*.db
+*.db-journal* # SQLite journal files
+
+# Virtual environment folder (if it's inside the project dir)
+# Example: venv/ or env/ - Adjust if yours is named differently or outside
+pihole-ai-analyzer-env/ # Or whatever you named your venv
+
+# IDE / Editor specific files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.log
+last_check.txt
