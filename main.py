@@ -12,16 +12,27 @@ import notification_manager
 
 # --- Configuration for Logging ---
 # Configure logging level, format, and output (e.g., file and console)
-log_format = '%(asctime)s - %(levelname)s - [%(module)s:%(lineno)d] - %(message)s'
-logging.basicConfig(
-    level=logging.INFO, # Set to logging.DEBUG for more verbose output
-    format=log_format,
-    handlers=[
-        logging.FileHandler("analyzer.log"), # Log to a file
-        logging.StreamHandler() # Log to console
-    ]
-)
-logging.info("--- Starting Pi-hole AI Analyzer ---")
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+def configure_logging():
+    # Root logger
+    logger  = logging.getLogger()
+    formatter = logging.Formatter(
+       fmt='%(asctime)s - %(levelname)s - [%(module)s:%(lineno)d] - %(message)s',
+       datefmt="%Y-%m-%d %H:%M:%S"
+   )
+   # Create and configure stream handler (stdout)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.INFO)
+    stream_handler.setFormatter(formatter)
+    # Create and configure file handler
+    file_handler = logging.FileHandler("analyzer.log", mode='a')
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+    # Attach handlers to the logger
+    logger.addHandler(stream_handler)
+    logger.addHandler(file_handler)
 
 
 # --- Constants and State ---
@@ -35,22 +46,21 @@ NOTIFY_CATEGORIES = {"Malicious", "Illegal", "AdultContent", "Gambling", "Suspic
 
 
 # --- Helper Functions ---
-
 def load_last_check_timestamp() -> float:
     """Loads the timestamp of the last successfully processed query."""
     try:
         with open(LAST_CHECK_TIMESTAMP_FILE, 'r') as f:
             timestamp_str = f.read().strip()
-            logging.info(f"Loaded last check timestamp: {timestamp_str}")
+            logger.info(f"Loaded last check timestamp: {timestamp_str}")
             return float(timestamp_str)
     except FileNotFoundError:
-        logging.info("Last check timestamp file not found. Processing all available recent queries.")
+        logger.info("Last check timestamp file not found. Processing all available recent queries.")
         return 0.0 # Start from the beginning if file doesn't exist
     except ValueError:
-        logging.error(f"Invalid timestamp format in {LAST_CHECK_TIMESTAMP_FILE}. Starting from beginning.")
+        logger.error(f"Invalid timestamp format in {LAST_CHECK_TIMESTAMP_FILE}. Starting from beginning.")
         return 0.0
     except Exception as e:
-        logging.error(f"Error loading last check timestamp: {e}")
+        logger.error(f"Error loading last check timestamp: {e}")
         return 0.0 # Default to safety
 
 def save_last_check_timestamp(timestamp: float):
@@ -58,16 +68,16 @@ def save_last_check_timestamp(timestamp: float):
     try:
         with open(LAST_CHECK_TIMESTAMP_FILE, 'w') as f:
             f.write(str(timestamp))
-        logging.info(f"Saved last check timestamp: {timestamp}")
+        logger.info(f"Saved last check timestamp: {timestamp}")
     except Exception as e:
-        logging.error(f"Error saving last check timestamp: {e}")
+        logger.error(f"Error saving last check timestamp: {e}")
 
 
 # --- Main Execution Logic ---
 
 def run_analysis_cycle():
     """Performs one full cycle of fetching, analyzing, storing, and notifying."""
-    logging.info("Starting new analysis cycle...")
+    logger.info("Starting new analysis cycle...")
     findings_for_notification = [] # Collect findings that trigger alerts
     latest_processed_query_time = 0.0
 
@@ -78,7 +88,7 @@ def run_analysis_cycle():
     # 2. Authenticate with Pi-hole
     sid = pihole_client.authenticate()
     if not sid:
-        logging.error("Pi-hole authentication failed. Cannot proceed this cycle.")
+        logger.error("Pi-hole authentication failed. Cannot proceed this cycle.")
         return # Stop this cycle if auth fails
 
     # 3. Load Last Check Timestamp
@@ -89,13 +99,13 @@ def run_analysis_cycle():
     #    We fetch a recent batch and filter locally.
     raw_queries = pihole_client.get_recent_queries(sid)
     if raw_queries is None: # Check for None specifically (indicates error)
-        logging.error("Failed to retrieve queries from Pi-hole. Skipping rest of cycle.")
+        logger.error("Failed to retrieve queries from Pi-hole. Skipping rest of cycle.")
         return
     elif not raw_queries: # Empty list is okay, just means no queries
-        logging.info("No recent queries returned by Pi-hole API.")
+        logger.info("No recent queries returned by Pi-hole API.")
         # Optionally update timestamp file even if no queries, to mark the check time?
         # save_last_check_timestamp(time.time()) # Or keep the old one? Your choice.
-        logging.info("Analysis cycle finished: No new queries.")
+        logger.info("Analysis cycle finished: No new queries.")
         return
 
     # 5. Filter Queries Newer Than Last Check
@@ -105,14 +115,14 @@ def run_analysis_cycle():
     ]
 
     if not new_queries:
-        logging.info(f"No new queries found since last check time ({datetime.fromtimestamp(last_check_time).isoformat()}).")
+        logger.info(f"No new queries found since last check time ({datetime.fromtimestamp(last_check_time).isoformat()}).")
         # Update timestamp to the latest query time seen, even if none are 'new' for processing
         latest_query_time_in_batch = max(q['timestamp'] for q in raw_queries if q.get("timestamp")) if raw_queries else last_check_time
         save_last_check_timestamp(max(last_check_time, latest_query_time_in_batch))
-        logging.info("Analysis cycle finished: No new queries to process.")
+        logger.info("Analysis cycle finished: No new queries to process.")
         return
 
-    logging.info(f"Processing {len(new_queries)} new queries since last check...")
+    logger.info(f"Processing {len(new_queries)} new queries since last check...")
     # Track the latest timestamp among the queries we are actually processing
     latest_processed_query_time = max(q['timestamp'] for q in new_queries if q.get("timestamp"))
 
@@ -131,7 +141,7 @@ def run_analysis_cycle():
             })
 
     unique_domains_to_check = list(domain_query_map.keys())
-    logging.info(f"Found {len(unique_domains_to_check)} unique new domains to analyze.")
+    logger.info(f"Found {len(unique_domains_to_check)} unique new domains to analyze.")
 
 
     # 7. (Optional) Pre-check with Urlhaus: This will be added later
@@ -142,7 +152,7 @@ def run_analysis_cycle():
     #    as the AI provides richer category analysis (e.g., Gambling, Adult).
     ai_analysis_results = None
     if unique_domains_to_check: # Only call AI if there are domains
-        logging.info("Running AI analysis...")
+        logger.info("Running AI analysis...")
         try:
             # Pass the list of unique domains directly to the analyzer
             # The analyzer internally handles creating the prompt with these domains
@@ -177,14 +187,14 @@ def run_analysis_cycle():
             ai_analysis_results = ai_analyzer.analyze_dns_batch(queries_for_ai) # Send relevant subset of original queries
 
         except Exception as e:
-            logging.error(f"Error during AI analysis: {e}", exc_info=True)
-        logging.info("AI analysis complete.")
+            logger.error(f"Error during AI analysis: {e}", exc_info=True)
+        logger.info("AI analysis complete.")
     else:
-        logging.info("No unique new domains to send for AI analysis.")
+        logger.info("No unique new domains to send for AI analysis.")
 
 
     # 9. Process Findings and Store in Database
-    logging.info("Processing and storing findings...")
+    logger.info("Processing and storing findings...")
     processed_domains = set() # Keep track of domains already processed to avoid duplicates if AI and GSB overlap significantly
 
     # Process AI analysis results
@@ -225,12 +235,12 @@ def run_analysis_cycle():
                     processed_domains.add(domain) # Mark as processed
 
 
-    logging.info("Processing and storing findings complete.")
+    logger.info("Processing and storing findings complete.")
 
 
     # 10. Send Notifications (if any findings warrant it)
     if findings_for_notification:
-        logging.info(f"Found {len(findings_for_notification)} findings triggering notification.")
+        logger.info(f"Found {len(findings_for_notification)} findings triggering notification.")
         subject = f"Pi-hole Alert: {len(findings_for_notification)} Noteworthy DNS Queries Detected"
         body_lines = ["Pi-hole AI Analyzer detected the following noteworthy DNS queries:\n"]
         for finding in findings_for_notification:
@@ -247,11 +257,11 @@ def run_analysis_cycle():
 
         email_success = notification_manager.send_notification_email(subject, body)
         if email_success:
-            logging.info("Notification email sent successfully.")
+            logger.info("Notification email sent successfully.")
         else:
-            logging.error("Failed to send notification email.")
+            logger.error("Failed to send notification email.")
     else:
-        logging.info("No findings triggered a notification in this cycle.")
+        logger.info("No findings triggered a notification in this cycle.")
 
 
     # 11. Update Last Check Timestamp
@@ -262,11 +272,12 @@ def run_analysis_cycle():
          save_last_check_timestamp(max(last_check_time, latest_query_time_in_batch))
 
 
-    logging.info("Analysis cycle finished.")
+    logger.info("Analysis cycle finished.")
 
 
 # --- Main Execution Loop ---
 if __name__ == "__main__":
+    configure_logging()
     # --- Initial Checks ---
     # Check if essential Pi-hole config is present before starting loop
     if not config.PIHOLE_BASE_URL or not config.PIHOLE_PASSWORD:
@@ -288,4 +299,4 @@ if __name__ == "__main__":
     # For a single run:
     run_analysis_cycle()
 
-    logging.info("--- Pi-hole AI Analyzer Finished ---")
+    logger.info("--- Pi-hole AI Analyzer Finished ---")

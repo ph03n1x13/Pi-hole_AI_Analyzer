@@ -1,4 +1,6 @@
 # Pi-hole AI Analyzer
+![analyzer image](assets/analyzer.jpg "Title")    
+
 
 [![Python Version](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
 [![Google Gemini API](https://img.shields.io/badge/Google%20AI-Gemini%20API-orange.svg)](https://ai.google.dev/)

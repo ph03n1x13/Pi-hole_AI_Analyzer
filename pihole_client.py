@@ -12,6 +12,7 @@ Clear unnecessary sessions from
 http://192.168.1.233/admin/settings/api -> Expert ->   Currently active sessions  and remove unnecessary sessions
 """
 # Setup basic logging
+logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- Authentication Function ---
@@ -31,7 +32,7 @@ def authenticate() -> str | None:
     payload = {"password": config.PIHOLE_PASSWORD}
     headers = {'Content-Type': 'application/json'}
 
-    logging.info(f"Attempting authentication with Pi-hole at {auth_url}...")
+    logger.info(f"Attempting authentication with Pi-hole at {auth_url}...")
 
     try:
         response = requests.post(auth_url, json=payload, headers=headers, timeout=10) # Added timeout
@@ -42,7 +43,7 @@ def authenticate() -> str | None:
         if auth_data.get("session") and auth_data["session"].get("valid"):
             sid = auth_data["session"].get("sid")
             if sid:
-                logging.info("Pi-hole authentication successful.")
+                logger.info("Pi-hole authentication successful.")
                 # Optionally log csrf: csrf = auth_data["session"].get("csrf")
                 return sid
             else:
@@ -80,7 +81,7 @@ def get_recent_queries(sid: str) -> list[dict] | None:
         sid: The valid session ID obtained from authenticate().
 
     Returns:
-        A list of dictionaries, where each dictionary represents a processed
+        A list of dictionaries, 100 for now, where each dictionary represents a processed
         DNS query, or None if an error occurs. Returns an empty list if
         no queries are found but the request was successful.
     """
@@ -95,7 +96,7 @@ def get_recent_queries(sid: str) -> list[dict] | None:
     # Pi-hole API expects the session ID as a cookie
     headers = {'sid': sid}
 
-    logging.info(f"Fetching recent queries from {queries_url} ...")
+    logger.info(f"Fetching recent queries from {queries_url} ...")
 
     try:
         # Note: The 'api/queries' endpoint might return *all* queries or a large number.
@@ -120,7 +121,7 @@ def get_recent_queries(sid: str) -> list[dict] | None:
 
         processed_queries = []
         # Check the length
-        logging.info(f"Received {len(query_data['queries'])} raw query entries from Pi-hole.")
+        logger.info(f"Received {len(query_data['queries'])} raw query entries from Pi-hole.")
 
         # Process each query to extract only the needed fields
         for query in query_data["queries"]:
@@ -145,7 +146,7 @@ def get_recent_queries(sid: str) -> list[dict] | None:
                  logging.warning(f"Skipping query due to missing domain or timestamp: {query}")
 
 
-        logging.info(f"Successfully processed {len(processed_queries)} queries.")
+        logger.info(f"Successfully processed {len(processed_queries)} queries.")
         return processed_queries
 
     except requests.exceptions.ConnectionError as e:
@@ -170,7 +171,7 @@ def get_recent_queries(sid: str) -> list[dict] | None:
 
 
 def delete_session(sid) -> None:
-    logging.info("Deleting Session...")
+    logger.info("Deleting Session...")
     auth_url = f"{config.PIHOLE_BASE_URL.rstrip('/')}/api/auth" # Ensure no double slash
     headers = {'sid': sid}
     try:
@@ -201,7 +202,7 @@ if __name__ == "__main__":
     if session_id:
         print(f"Authentication successful. Session ID: {session_id[:5]}<truncated>...") # Print only first few chars for safety
         queries = get_recent_queries(session_id)
-        logging.info(queries)
+        logger.info(queries)
         delete_session(session_id)
 
         if queries is not None: # Check for None specifically, empty list is valid
