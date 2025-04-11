@@ -13,7 +13,7 @@ import notification_manager
 # --- Configuration for Logging ---
 # Configure logging level, format, and output (e.g., file and console)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 def configure_logging():
     # Root logger

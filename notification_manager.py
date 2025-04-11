@@ -6,6 +6,7 @@ import smtplib
 from email.mime.text import MIMEText
 
 # Setup basic logging
+logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def send_notification_email(subject: str, body_text: str) -> True | False:
@@ -39,12 +40,12 @@ def send_notification_email(subject: str, body_text: str) -> True | False:
 
     missing_configs = [name for name, value in required_configs.items() if not value]
     if missing_configs:
-        logging.error(f"Cannot send email. Missing required SMTP configurations: {', '.join(missing_configs)}")
+        logger.error(f"Cannot send email. Missing required SMTP configurations: {', '.join(missing_configs)}")
         return False
 
     # Check if port conversion failed in config.py
     if not isinstance(smtp_port, int):
-         logging.error(f"Cannot send email. Invalid SMTP_PORT configured: Must be an integer.")
+         logger.error(f"Cannot send email. Invalid SMTP_PORT configured: Must be an integer.")
          return False
 
 
@@ -54,7 +55,7 @@ def send_notification_email(subject: str, body_text: str) -> True | False:
     message['From'] = sender_email
     message['To'] = receiver_email
 
-    logging.info(f"Attempting to send email notification to {receiver_email} via {smtp_server}:{smtp_port}")
+    logger.info(f"Attempting to send email notification to {receiver_email} via {smtp_server}:{smtp_port}")
 
     # --- Connect and Send ---
     server = None # Initialize server to None
@@ -79,34 +80,34 @@ def send_notification_email(subject: str, body_text: str) -> True | False:
 
         # Send the email
         server.sendmail(sender_email, receiver_email, message.as_string())
-        logging.info(f"Email notification sent successfully to {receiver_email}.")
+        logger.info(f"Email notification sent successfully to {receiver_email}.")
         return True
 
     except smtplib.SMTPAuthenticationError as e:
-        logging.error(f"SMTP Authentication Error: Failed to login to {smtp_server} with username {login_username}. Check username/password/app password. Error: {e}")
+        logger.error(f"SMTP Authentication Error: Failed to login to {smtp_server} with username {login_username}. Check username/password/app password. Error: {e}")
         return False
     except smtplib.SMTPConnectError as e:
-        logging.error(f"SMTP Connection Error: Failed to connect to {smtp_server}:{smtp_port}. Check server/port/firewall. Error: {e}")
+        logger.error(f"SMTP Connection Error: Failed to connect to {smtp_server}:{smtp_port}. Check server/port/firewall. Error: {e}")
         return False
     except smtplib.SMTPServerDisconnected:
-        logging.error(f"SMTP Server Disconnected unexpectedly during operation with {smtp_server}.")
+        logger.error(f"SMTP Server Disconnected unexpectedly during operation with {smtp_server}.")
         return False
     except smtplib.SMTPException as e:
         # Catch other potential smtplib errors
-        logging.error(f"SMTP Error occurred: {e}", exc_info=True)
+        logger.error(f"SMTP Error occurred: {e}", exc_info=True)
         return False
     except TimeoutError:
-         logging.error(f"Timeout occurred while trying to connect or communicate with {smtp_server}:{smtp_port}.")
+         logger.error(f"Timeout occurred while trying to connect or communicate with {smtp_server}:{smtp_port}.")
          return False
     except ssl.SSLError as e:
-         logging.error(f"SSL Error occurred, potentially during STARTTLS. Check port/server compatibility. Error: {e}")
+         logger.error(f"SSL Error occurred, potentially during STARTTLS. Check port/server compatibility. Error: {e}")
          return False
     except OSError as e:
          # Catches potential network errors like "[Errno 111] Connection refused" or socket errors
-         logging.error(f"Network or OS Error occurred connecting to {smtp_server}:{smtp_port}. Error: {e}")
+         logger.error(f"Network or OS Error occurred connecting to {smtp_server}:{smtp_port}. Error: {e}")
          return False
     except Exception as e:
-        logging.error(f"An unexpected error occurred sending email: {e}", exc_info=True)
+        logger.error(f"An unexpected error occurred sending email: {e}", exc_info=True)
         return False
     finally:
         # Ensure the connection is closed if it was established
@@ -116,47 +117,3 @@ def send_notification_email(subject: str, body_text: str) -> True | False:
                 logging.debug("SMTP connection closed.")
             except Exception:
                  logging.warning("Error trying to quit SMTP server connection, might already be closed.", exc_info=False)
-
-
-# --- Example Usage (for testing this module directly) ---
-if __name__ == "__main__":
-    print("Testing Notification Manager (Email)...")
-
-    # Check if required configuration exists first
-    smtp_server = config.SMTP_SERVER
-    smtp_port = config.SMTP_PORT
-    sender = config.EMAIL_SENDER
-    recipient = config.EMAIL_RECIPIENT
-    password = config.SMTP_PASSWORD
-    username = config.SMTP_USERNAME or sender
-
-    if not all([smtp_server, smtp_port, sender, recipient, username, password]):
-        print("\nOne or more required SMTP settings are missing in the .env file.")
-        print("Please set: SMTP_SERVER, SMTP_PORT, EMAIL_SENDER, EMAIL_RECIPIENT, SMTP_PASSWORD")
-        print("(Optional: SMTP_USERNAME if different from EMAIL_SENDER)")
-    else:
-        print(f"\nAttempting to send a test email:")
-        print(f"  From: {sender}")
-        print(f"  To: {recipient}")
-        print(f"  Server: {smtp_server}:{smtp_port}")
-
-        test_subject = "Pi-hole AI Analyzer - Test Notification"
-        test_body = f"""
-Hello,
-
-This is a test email from the Pi-hole AI Analyzer script.
-If you received this, the email notification configuration seems to be working.
-
-Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}
-"""
-        success = send_notification_email(test_subject, test_body)
-
-        if success:
-            print("\nTest email sent successfully! Please check the recipient's inbox.")
-        else:
-            print("\nFailed to send test email. Please check the logs above for errors.")
-            print("Common issues:")
-            print("  - Incorrect SMTP server, port, username, or password.")
-            print("  - Need to use an 'App Password' for services like Gmail/Outlook with 2FA.")
-            print("  - Firewall blocking the connection.")
-            print("  - Incorrect SSL/TLS setting inferred from the port (check provider docs).")

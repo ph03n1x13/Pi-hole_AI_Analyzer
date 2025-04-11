@@ -126,6 +126,6 @@ EMAIL_RECIPIENT=recipient_email@example.com # Where to send alerts
 ## To Dos
 **Please note that this is a PoC phase codebase and the development is still going on**
 - Optimize AI Prompt 
-- Add URLhaus feature 
-- Fix analyzer.log empty issue 
+- Add URLhaus feature   
+~~- Fix analyzer.log empty issue~~ 
 - Add unit tests in a separate `tests/` folder. Presently test codes are written in respective modules.

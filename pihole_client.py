@@ -191,29 +191,3 @@ def delete_session(sid) -> None:
         return None
     except Exception as e:
         logging.error(f"An unexpected error occurred during Pi-hole session delte: {e}", exc_info=True) # Log stack trace
-
-# --- Example Usage (for testing this module directly) ---
-if __name__ == "__main__":
-    print("Testing Pi-hole Client...")
-
-    # Make sure your .env file is correctly filled out in the project root
-    session_id = authenticate()
-
-    if session_id:
-        print(f"Authentication successful. Session ID: {session_id[:5]}<truncated>...") # Print only first few chars for safety
-        queries = get_recent_queries(session_id)
-        logger.info(queries)
-        delete_session(session_id)
-
-        if queries is not None: # Check for None specifically, empty list is valid
-            print(f"Successfully retrieved {len(queries)} processed queries.")
-            if queries:
-                print("First few queries:")
-                for i, q in enumerate(queries[:5]):
-                    print(f"  {i+1}: Time={q['timestamp']}, Type={q['type']}, Status={q['status']}, Domain={q['domain']}, Client={q['client_ip']}")
-            else:
-                print("No recent queries found or returned by the API.")
-        else:
-            print("Failed to retrieve queries.")
-    else:
-        print("Authentication failed.")

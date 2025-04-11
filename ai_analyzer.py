@@ -5,6 +5,7 @@ import logging
 import google.generativeai as genai
 
 # Setup basic logging
+logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- AI Configuration ---
@@ -20,13 +21,13 @@ try:
             # generation_config=generation_config,
             # safety_settings=safety_settings
         )
-        logging.info(f"Google Generative AI configured with model: {model.model_name}")
+        logger.info(f"Google Generative AI configured with model: {model.model_name}")
     else:
         model = None
         logging.warning("GOOGLE_API_KEY not found in config. AI Analyzer will not function.")
 
 except Exception as e:
-    logging.error(f"Error configuring Google Generative AI: {e}", exc_info=True)
+    logger.error(f"Error configuring Google Generative AI: {e}", exc_info=True)
     model = None
 
 
@@ -46,20 +47,20 @@ def analyze_dns_batch(dns_query_list: list[dict]) -> list[dict] | None:
         Example item: {"domain": "example.com", "categories": ["Suspicious"], "reason": "Common ad tracker."}
     """
     if not model:
-        logging.error("Gemini AI model is not configured. Cannot perform analysis.")
+        logger.error("Gemini AI model is not configured. Cannot perform analysis.")
         return None
 
     if not dns_query_list:
-        logging.info("No DNS queries provided for AI analysis.")
+        logger.info("No DNS queries provided for AI analysis.")
         return [] # Return empty list, not None
 
     # 1. Extract Unique Domains for Efficiency
     unique_domains = sorted(list(set(item['domain'] for item in dns_query_list if item.get('domain'))))
     if not unique_domains:
-        logging.info("No valid domains found in the query list for AI analysis.")
+        logger.info("No valid domains found in the query list for AI analysis.")
         return []
 
-    logging.info(f"Sending {len(unique_domains)} unique domains for AI analysis...")
+    logger.info(f"Sending {len(unique_domains)} unique domains for AI analysis...")
     # Consider batching if len(unique_domains) is very large (e.g., > 500-1000) due to prompt size limits
 
     # 2. Construct the Prompt for Gemini
@@ -102,7 +103,7 @@ Return ONLY the JSON list, without any introductory text or explanation before o
         start_time = time.time()
         response = model.generate_content(prompt)
         end_time = time.time()
-        logging.info(f"Gemini API call took {end_time - start_time:.2f} seconds.")
+        logger.info(f"Gemini API call took {end_time - start_time:.2f} seconds.")
 
         # Log parts info if available (useful for debugging safety filters etc.)
         # if response.prompt_feedback:
@@ -131,68 +132,25 @@ Return ONLY the JSON list, without any introductory text or explanation before o
             analysis_results = json.loads(response_text)
             # Basic validation: Is it a list? Do items look like dicts?
             if not isinstance(analysis_results, list):
-                logging.error(f"AI analysis parsing error: Expected a JSON list, but got type {type(analysis_results)}. Response: {response_text[:500]}...") # Log truncated response
+                logger.error(f"AI analysis parsing error: Expected a JSON list, but got type {type(analysis_results)}. Response: {response_text[:500]}...") # Log truncated response
                 return None
             # Further validation could check for 'domain', 'categories', 'reason' keys in list items
 
-            logging.info(f"Successfully parsed AI analysis for {len(analysis_results)} domains.")
+            logger.info(f"Successfully parsed AI analysis for {len(analysis_results)} domains.")
             return analysis_results
 
         except json.JSONDecodeError as json_err:
-            logging.error(f"AI analysis parsing error: Failed to decode JSON. Error: {json_err}. Response: {response_text[:500]}...")
+            logger.error(f"AI analysis parsing error: Failed to decode JSON. Error: {json_err}. Response: {response_text[:500]}...")
             return None
         except Exception as e:
-             logging.error(f"An unexpected error occurred during AI response parsing: {e}", exc_info=True)
+             logger.error(f"An unexpected error occurred during AI response parsing: {e}", exc_info=True)
              return None
 
 
     except Exception as e:
         # Catch potential errors from the API call itself (e.g., connection, API key issues, content filtering)
-        logging.error(f"An unexpected error occurred calling the Gemini API: {e}", exc_info=True)
+        logger.error(f"An unexpected error occurred calling the Gemini API: {e}", exc_info=True)
         # Check if the exception has response details (specific to google.api_core.exceptions)
         # if hasattr(e, 'response') and e.response:
-        #     logging.error(f"API Error Response: {e.response.text}")
+        #     logger.error(f"API Error Response: {e.response.text}")
         return None
-
-
-# --- Example Usage (for testing this module directly) ---
-if __name__ == "__main__":
-    import pihole_client as pc
-    print("Testing AI Analyzer (Gemini)...")
-
-    if not model:
-        print("Google Generative AI model not configured (check GOOGLE_API_KEY in .env). Cannot run test.")
-    else:
-        # Sample DNS query data (mimicking output from pihole_client)
-        # test_queries = [
-        #     {"id": 1, "timestamp": time.time(), "type": "A", "status": "FORWARDED", "domain": "google.com", "client_ip": "192.168.1.10"},
-        #     {"id": 2, "timestamp": time.time(), "type": "AAAA", "status": "GRAVITY", "domain": "doubleclick.net", "client_ip": "192.168.1.11"},
-        #     {"id": 3, "timestamp": time.time(), "type": "A", "status": "FORWARDED", "domain": "github.com", "client_ip": "192.168.1.10"},
-        #     {"id": 4, "timestamp": time.time(), "type": "A", "status": "FORWARDED", "domain": "some-adult-site-example.net", "client_ip": "192.168.1.12"},
-        #     {"id": 5, "timestamp": time.time(), "type": "A", "status": "FORWARDED", "domain": "online-casino-win.xyz", "client_ip": "192.168.1.13"},
-        #     {"id": 6, "timestamp": time.time(), "type": "A", "status": "FORWARDED", "domain": "google.com", "client_ip": "192.168.1.14"}, # Duplicate domain
-        #      {"id": 7, "timestamp": time.time(), "type": "A", "status": "FORWARDED", "domain": "unknown-tracker-site.info", "client_ip": "192.168.1.15"},
-        #     {"id": 8, "timestamp": time.time(), "type": "A", "status": "FORWARDED", "domain": "tinder.com", "client_ip": "192.168.1.16"},
-        #
-        # ]
-        sid = pc.authenticate()
-        test_queries = pc.get_recent_queries(sid)
-        pc.delete_session(sid)
-        analysis = analyze_dns_batch(test_queries)
-
-        print(f"\nAnalyzing {len(test_queries)} test queries...")
-
-        if analysis is not None:
-            print("\nAI Analysis Results:")
-            if analysis:
-                 # Sort results alphabetically by domain for consistent output
-                 analysis.sort(key=lambda x: x.get('domain', ''))
-                 for result in analysis:
-                     categories = ", ".join(result.get('categories', [])) if result.get('categories') else "None"
-                     print(f"  - Domain: {result.get('domain', 'N/A')}")
-                     print(f"    Categories: {categories}")
-                     print(f"    Reason: {result.get('reason', 'N/A')}")
-            else:
-                print("AI analysis returned successfully but found no specific categories or had no domains to analyze.")
-        else:
-            print("\nAI analysis failed. Check logs for errors.")
